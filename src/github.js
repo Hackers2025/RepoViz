@@ -1,15 +1,17 @@
+// src/github.js
 import { Octokit } from "@octokit/rest";
 
 // Initialize Octokit
 const octokit = new Octokit({ 
-  // Ensure your .env token is loaded. If not, this might be undefined (which is okay for public repos to a limit)
   auth: import.meta.env.VITE_GITHUB_TOKEN 
 });
 
+/**
+ * 1. FETCH REPO TREE: Get the file structure
+ */
 export const fetchRepoTree = async (owner, repo) => {
   try {
-    // 1. Get the repository details to find the "default branch" (usually main or master)
-    // We use .request() to avoid "undefined property" errors
+    // 1. Get the default branch
     const repoResponse = await octokit.request('GET /repos/{owner}/{repo}', {
       owner,
       repo,
@@ -17,20 +19,39 @@ export const fetchRepoTree = async (owner, repo) => {
     
     const defaultBranch = repoResponse.data.default_branch;
 
-    // 2. Fetch the file tree recursively using that branch
+    // 2. Fetch the tree recursively
     const treeResponse = await octokit.request('GET /repos/{owner}/{repo}/git/trees/{tree_sha}', {
       owner,
       repo,
       tree_sha: defaultBranch,
-      recursive: 'true', // returns all files, deep inside folders
+      recursive: 'true', 
     });
 
-    // Success! Return the array of files
     return treeResponse.data.tree;
 
   } catch (error) {
     console.error("GitHub API Error:", error);
-    // If it fails, return empty array so the app doesn't crash
     return []; 
+  }
+};
+
+/**
+ * 2. FETCH FILE CONTENT: Get the raw code for a single file
+ * (This is the missing function causing your crash!)
+ */
+export const fetchFileContent = async (owner, repo, path) => {
+  try {
+    const response = await octokit.request('GET /repos/{owner}/{repo}/contents/{path}', {
+      owner,
+      repo,
+      path,
+      mediaType: {
+        format: 'raw' // Ask for raw text, not JSON
+      }
+    });
+    return response.data;
+  } catch (error) {
+    console.error("Error fetching code:", error);
+    return "// Error: Could not load code. It might be a binary file or rate limited.";
   }
 };

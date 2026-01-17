@@ -85,8 +85,7 @@ export default function RepoGraph3D({ graphData, onNodeSelect }) {
         nodeColor={node => {
             if (node.id === 'root') return '#ef4444'; 
             if (node.group === 'folder') return '#3b82f6'; 
-            if (String(node.name).endsWith('.js') || String(node.name).endsWith('.tsx')) return '#eab308'; 
-            return '#10b981'; 
+            return '#eab308';
         }}
         nodeVal={node => node.group === 'folder' ? 15 : 5} 
         linkWidth={link => link.type === 'dependency' ? 0.5 : 1.5}

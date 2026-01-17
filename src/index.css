@@ -1,9 +1,9 @@
+/* Essential React Flow Styles */
+@import '@xyflow/react/dist/style.css';
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
-
-/* Essential React Flow Styles */
-@import '@xyflow/react/dist/style.css';
 
 /* Dark Mode Background */
 body {
