@@ -147,10 +147,9 @@ export default function RepoGraph3D({ graphData, onNodeSelect }) {
             const group = new THREE.Group();
             
             // Determine Color
-            let color = '#10b981'; // Default Green (File)
+            let color = '#eab308'; // Default Yellow (File)
             if (node.id === 'root') color = '#ef4444'; // Red
             else if (node.group === 'folder') color = '#3b82f6'; // Blue
-            else if (String(node.name).endsWith('.js') || String(node.name).endsWith('.tsx')) color = '#eab308'; // Yellow
 
             // Determine Size
             const size = node.group === 'root' ? 10 : (node.group === 'folder' ? 6 : 4);
