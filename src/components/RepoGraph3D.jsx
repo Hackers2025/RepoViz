@@ -9,19 +9,32 @@ export default function RepoGraph3D({ graphData, onNodeSelect }) {
   const [pruneTrigger, setPruneTrigger] = useState(0);
   const [hoverNode, setHoverNode] = useState(null);
 
-  const getNeighbors = useCallback((node) => {
-    const neighbors = new Set();
-    // Loop through links to find connections
-    graphData.links.forEach(link => {
-      const sourceId = typeof link.source === 'object' ? link.source.id : link.source;
-      const targetId = typeof link.target === 'object' ? link.target.id : link.target;
+  const getPathToRoot = useCallback((node) => {
+    const path = new Set();
+    let currentId = node.id;
+
+    // Safety: Limit loop to 100 levels deep to prevent crashes
+    let attempts = 0;
+    while (currentId && attempts < 100) {
+      path.add(currentId); // Add current node to the "lit up" list
       
-      // If this link touches our node, add the OTHER end to neighbors
-      if (sourceId === node.id) neighbors.add(targetId);
-      if (targetId === node.id) neighbors.add(sourceId);
-    });
-    return neighbors;
-  }, [graphData]);
+      if (currentId === 'root') break; // Stop if we hit the top
+
+      // Find the link where "Target" == Current Node (so "Source" is the Parent)
+      const parentLink = graphData.links.find(l => 
+          (typeof l.target === 'object' ? l.target.id : l.target) === currentId
+      );
+      
+      // Move up to the parent
+      if (parentLink) {
+          currentId = typeof parentLink.source === 'object' ? parentLink.source.id : parentLink.source;
+      } else {
+          break; // No parent found (detached node)
+      }
+      attempts++;
+    }
+    return path;
+    }, [graphData]);
 
   // 3. Measure the container size on load and resize
   useEffect(() => {
@@ -115,40 +128,58 @@ export default function RepoGraph3D({ graphData, onNodeSelect }) {
         // 3. Capture Hover Events
         onNodeHover={setHoverNode}
 
-        // 4. Dynamic Node Color (The Spotlight Logic)
+        // 1. Highlight the full Path
         nodeColor={node => {
-            // Define standard colors
-            const standardColor = 
-                node.id === 'root' ? '#ef4444' : 
-                node.group === 'folder' ? '#3b82f6' : 
-                (String(node.name).endsWith('.js') || String(node.name).endsWith('.tsx')) ? '#eab308' : 
-                '#10b981';
+          const standardColor = 
+          node.id === 'root' ? '#ef4444' : 
+          node.group === 'folder' ? '#3b82f6' : 
+          (String(node.name).endsWith('.js') || String(node.name).endsWith('.tsx')) ? '#eab308' : 
+          '#10b981';
 
-            // LOGIC: If hovering AND this node is not the target AND not a neighbor...
-            if (hoverNode && hoverNode.id !== node.id && !getNeighbors(hoverNode).has(node.id)) {
-                return '#1e293b'; // ...Turn it Dark Grey (Ghost Mode)
+          // LOGIC: If hovering...
+          if (hoverNode) {
+            const path = getPathToRoot(hoverNode);
+            // If this node is NOT in the path, dim it
+            if (!path.has(node.id)) {
+                return '#1e293b'; // Ghost Mode
             }
-            return standardColor;
+          }
+          return standardColor;
         }}
 
-        // 5. Dynamic Link Transparency
-        linkColor={link => {
+          // 2. Highlight only links ON the path
+        
+          linkColor={link => {
             if (hoverNode) {
-                const sourceId = typeof link.source === 'object' ? link.source.id : link.source;
-                const targetId = typeof link.target === 'object' ? link.target.id : link.target;
-                
-                // If link is NOT connected to the hovered node, hide it completely
-                if (sourceId !== hoverNode.id && targetId !== hoverNode.id) {
-                    return 'rgba(0,0,0,0)'; // Invisible
+               const sourceId = typeof link.source === 'object' ? link.source.id : link.source;
+               const targetId = typeof link.target === 'object' ? link.target.id : link.target;
+                  
+               const path = getPathToRoot(hoverNode);
+               // Show link ONLY if both ends are part of the path
+               if (path.has(sourceId) && path.has(targetId)) {
+                return '#60a5fa'; // Bright Blue line for the active path
+                } else {
+                  return 'rgba(0,0,0,0)'; // Invisible
                 }
-            }
-            return '#334155'; // Default Grey
-        }}
+              }
+              return '#334155'; // Default color when not hovering
+          }}
+          
+          // Make the active path slightly thicker
+          linkWidth={link => {
+              if (hoverNode) {
+                  const sourceId = typeof link.source === 'object' ? link.source.id : link.source;
+                  const targetId = typeof link.target === 'object' ? link.target.id : link.target;
+                  const path = getPathToRoot(hoverNode);
+                  if (path.has(sourceId) && path.has(targetId)) return 3; // Thick line
+              }
+              return link.type === 'dependency' ? 0.5 : 1.5;
+          }}
         
         // 6. Adjust Opacity (Optional: makes ghosts see-through)
         nodeOpacity={1} 
         linkOpacity={0.3}
-        linkWidth={link => link.type === 'dependency' ? 0.5 : 1.5}
+ 
         linkDirectionalParticles={link => link.type === 'dependency' ? 4 : 0}
         linkDirectionalParticleSpeed={0.005}
         onNodeClick={handleNodeClick}
