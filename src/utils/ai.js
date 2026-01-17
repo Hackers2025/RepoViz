@@ -1,9 +1,10 @@
-import OpenAI from "openai";
+// src/utils/ai.js
+import { GoogleGenerativeAI } from "@google/generative-ai";
 
-const openai = new OpenAI({
-  apiKey: import.meta.env.VITE_OPENAI_API_KEY,
-  dangerouslyAllowBrowser: true 
-});
+// Initialize Gemini
+// Ensure you added VITE_GEMINI_API_KEY to your .env file!
+const genAI = new GoogleGenerativeAI(import.meta.env.VITE_GEMINI_API_KEY);
+const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
 
 // Improved Parser: Handles "Rogue JSON" gracefully
 const safeParseJSON = (content) => {
@@ -56,15 +57,22 @@ export const generateFileExplanation = async (fileName, fileCode, allFilePaths) 
       }
     `;
 
-    const completion = await openai.chat.completions.create({
-      messages: [{ role: "user", content: prompt }],
-      model: "gpt-4o-mini",
-      response_format: { type: "json_object" }
-    });
+    // const completion = await openai.chat.completions.create({
+    //   messages: [{ role: "user", content: prompt }],
+    //   model: "gpt-4o-mini",
+    //   response_format: { type: "json_object" }
+    // });
 
-    return safeParseJSON(completion.choices[0].message.content);
+    //return safeParseJSON(completion.choices[0].message.content);
 
+    // Gemini API Call
+    const result = await model.generateContent(prompt);
+    const response = await result.response;
+    const text = response.text();
+
+    return safeParseJSON(text);
   } catch (error) {
+    console.error("Gemini Error:", error);
     return { summary: "Could not analyze file.", detail: "" };
   }
 };
@@ -90,15 +98,51 @@ export const generateFolderSummary = async (folderName, folderFiles, allProjectF
           }
         `;
     
-        const completion = await openai.chat.completions.create({
-          messages: [{ role: "user", content: prompt }],
-          model: "gpt-4o-mini",
-          response_format: { type: "json_object" } 
-        });
+        // const completion = await openai.chat.completions.create({
+        //   messages: [{ role: "user", content: prompt }],
+        //   model: "gpt-4o-mini",
+        //   response_format: { type: "json_object" } 
+        // });
     
-        return safeParseJSON(completion.choices[0].message.content);
+        // return safeParseJSON(completion.choices[0].message.content);
+
+        // Gemini API Call
+        const result = await model.generateContent(prompt);
+        const response = await result.response;
+        const text = response.text();
+
+        return safeParseJSON(text);
     
       } catch (error) {
+        console.error("Gemini Error:", error);
         return { summary: "Could not analyze folder.", detail: "" };
       }
+};
+
+export const findImports = (code, allNodes) => {
+  const imports = [];
+  // Regex to find: import X from "path" OR import "path"
+  const regex = /from\s+['"](.+)['"]|import\s+['"](.+)['"]/g;
+  
+  let match;
+  while ((match = regex.exec(code)) !== null) {
+    // Group 1 or Group 2 contains the path (e.g., "./components/Button")
+    const importPath = match[1] || match[2];
+    if (!importPath) continue;
+
+    // Clean up the name (remove ./, ../, and extension)
+    const cleanName = importPath.split('/').pop().replace(/\.(js|jsx|ts|tsx|css)$/, '');
+
+    // FUZZY SEARCH: Find a node in the graph that matches this name
+    // We look for files that START with this name (to handle .js vs .tsx)
+    const targetNode = allNodes.find(n => {
+        const nodeFileName = n.name.split('.')[0]; // Remove extension from graph node
+        return nodeFileName === cleanName && n.group !== 'folder';
+    });
+
+    if (targetNode) {
+      imports.push(targetNode.id);
+    }
+  }
+  return imports;
 };

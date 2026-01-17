@@ -5,6 +5,7 @@ import { generate3DTree } from './utils/transformer3d';
 import RepoGraph3D from './components/RepoGraph3D'; 
 import Sidebar from './components/Sidebar';
 import { Loader2, Search, Github } from 'lucide-react';
+import { findImports } from './utils/ai';
 
 function App() {
   const [repoUrl, setRepoUrl] = useState('');
@@ -46,7 +47,14 @@ function App() {
     setSelectedNode(node);
     if (!node) return;
 
+    setData(prevData => ({
+        ...prevData,
+        links: prevData.links.filter(l => l.type !== 'dependency') // Remove old pink lines
+    }));
+
     setAiLoading(true);
+    setSidebarData({ summary: '', detail: '', code: '' });
+
     // Initialize with empty object
     setSidebarData({ summary: '', detail: '', code: '' }); 
 
@@ -71,6 +79,26 @@ function App() {
         const parts = cleanUrl.split('/');
         
         const code = await fetchFileContent(parts[0], parts[1], node.id);
+        
+        // --- NEW: DEPENDENCY VISUALIZATION ---
+        // 1. Find imported files
+        const importIds = findImports(code, data.nodes);
+        
+        // 2. Create new pink links
+        const newLinks = importIds.map(targetId => ({
+            source: node.id,
+            target: targetId,
+            type: 'dependency' // Mark as special
+        }));
+
+        // 3. Inject into Graph Data
+        if (newLinks.length > 0) {
+            setData(prevData => ({
+                ...prevData,
+                links: [...prevData.links, ...newLinks]
+            }));
+        }
+
         const aiResult = await generateFileExplanation(node.name, code, rawTreeList);
 
         setSidebarData({ 
