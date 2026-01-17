@@ -1,6 +1,52 @@
+import * as THREE from 'three'; // <--- Don't forget this!
 import React, { useRef, useCallback, useMemo, useState, useEffect } from 'react';
 import ForceGraph3D from 'react-force-graph-3d';
 import SpriteText from 'three-spritetext';
+
+// ---------------------------------------------------------
+// 2. HELPER FUNCTION (Place createDuck here)
+// ---------------------------------------------------------
+const createDuck = (node) => {
+  const group = new THREE.Group();
+
+  // Scale logic: Big files = Big Ducks
+  const baseSize = node.size && node.size > 0 ? Math.max(5, Math.log2(node.size) * 1.5) : 5;
+  const scale = baseSize * 0.2; 
+
+  // BODY
+  const bodyGeo = new THREE.SphereGeometry(4 * scale, 16, 16);
+  const bodyMat = new THREE.MeshLambertMaterial({ color: '#000000' }); 
+  const body = new THREE.Mesh(bodyGeo, bodyMat);
+  group.add(body);
+
+  // HEAD
+  const headGeo = new THREE.SphereGeometry(2.5 * scale, 16, 16);
+  const head = new THREE.Mesh(headGeo, bodyMat);
+  head.position.set(2.5 * scale, 3 * scale, 0); 
+  group.add(head);
+
+  // BEAK
+  const beakGeo = new THREE.ConeGeometry(1 * scale, 2 * scale, 8);
+  const beakMat = new THREE.MeshLambertMaterial({ color: '#f97316' }); 
+  const beak = new THREE.Mesh(beakGeo, beakMat);
+  beak.rotation.z = -Math.PI / 2; 
+  beak.position.set(5 * scale, 3 * scale, 0);
+  group.add(beak);
+
+  // EYES
+  const eyeGeo = new THREE.SphereGeometry(0.4 * scale);
+  const eyeMat = new THREE.MeshBasicMaterial({ color: '#000000' });
+  
+  const leftEye = new THREE.Mesh(eyeGeo, eyeMat);
+  leftEye.position.set(3.5 * scale, 4 * scale, 1 * scale);
+  group.add(leftEye);
+
+  const rightEye = new THREE.Mesh(eyeGeo, eyeMat);
+  rightEye.position.set(3.5 * scale, 4 * scale, -1 * scale);
+  group.add(rightEye);
+
+  return group;
+};
 
 export default function RepoGraph3D({ graphData, onNodeSelect }) {
   const graphRef = useRef();
@@ -110,21 +156,50 @@ export default function RepoGraph3D({ graphData, onNodeSelect }) {
         graphData={visibleData}
         backgroundColor="#0f172a"
         nodeLabel="name"
-        nodeVal={node => {
-          // 1. Root and Folders: Use fixed sizes (Like your original code)
-          if (node.id === 'root') return 30;
-          if (node.group === 'folder') return 20;
+        // nodeVal={node => {
+        //   // 1. Root and Folders: Use fixed sizes (Like your original code)
+        //   if (node.id === 'root') return 30;
+        //   if (node.group === 'folder') return 20;
 
-          // 2. Files: Check if we actually have a valid size
-          if (!node.size || node.size <= 0) {
-              return 5; // FALLBACK: If no size data, look like a normal file
-          }
+        //   // 2. Files: Check if we actually have a valid size
+        //   if (!node.size || node.size <= 0) {
+        //       return 5; // FALLBACK: If no size data, look like a normal file
+        //   }
 
-          // 3. If size exists, calculate the Heatmap size
-          // Math.max(5, ...) ensures even tiny files are at least size 5
-          console.log(node.size);
-          return Math.max(5, Math.log2(node.size) * 1.5);
-        }}
+        //   // 3. If size exists, calculate the Heatmap size
+        //   // Math.max(5, ...) ensures even tiny files are at least size 5
+        //   console.log(node.size);
+        //   return Math.max(5, Math.log2(node.size) * 1.5);
+        // }}
+        nodeVal={0} 
+    nodeOpacity={0}
+
+    // CUSTOM RENDERER
+    nodeThreeObject={node => {
+        // CASE 1: FOLDERS (Keep as Text Labels + Blue Sphere)
+        if (node.group === 'folder' || node.group === 'root') {
+            const group = new THREE.Group();
+            
+            // The Blue/Red Sphere
+            const color = node.id === 'root' ? '#ef4444' : '#3b82f6';
+            const geometry = new THREE.SphereGeometry(node.group === 'root' ? 10 : 6);
+            const material = new THREE.MeshLambertMaterial({ color, transparent: true, opacity: 0.8 });
+            group.add(new THREE.Mesh(geometry, material));
+
+            // The Text Label (Only if expanded)
+            if (!node.collapsed) {
+                const sprite = new SpriteText(node.name);
+                sprite.color = 'white';
+                sprite.textHeight = 4;
+                sprite.position.y = 12;
+                group.add(sprite);
+            }
+            return group;
+        }
+
+        // CASE 2: FILES -> BECOME DUCKS 🦆
+        return createDuck(node);
+    }}
         // 3. Capture Hover Events
         onNodeHover={setHoverNode}
 
@@ -177,22 +252,22 @@ export default function RepoGraph3D({ graphData, onNodeSelect }) {
           }}
         
         // 6. Adjust Opacity (Optional: makes ghosts see-through)
-        nodeOpacity={1} 
+        // nodeOpacity={0} 
         linkOpacity={0.3}
  
         linkDirectionalParticles={link => link.type === 'dependency' ? 4 : 0}
         linkDirectionalParticleSpeed={0.005}
         onNodeClick={handleNodeClick}
         nodeThreeObjectExtend={true}
-        nodeThreeObject={node => {
-            if (node.group === 'folder' && !node.collapsed) {
-                const sprite = new SpriteText(node.name);
-                sprite.color = 'white';
-                sprite.textHeight = 4; 
-                sprite.position.y = 12; 
-                return sprite;
-            }
-        }}
+        // nodeThreeObject={node => {
+        //     if (node.group === 'folder' && !node.collapsed) {
+        //         const sprite = new SpriteText(node.name);
+        //         sprite.color = 'white';
+        //         sprite.textHeight = 4; 
+        //         sprite.position.y = 12; 
+        //         return sprite;
+        //     }
+        // }}
       />
     </div>
   );
