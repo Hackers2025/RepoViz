@@ -10,6 +10,7 @@ import RepoGraph3D from './components/RepoGraph3D';
 import Sidebar from './components/Sidebar';
 import { Loader2, Search, Github } from 'lucide-react';
 import { findImports } from './utils/ai';
+import repovizLogo from "./assets/repobiz.jpg";
 
 function App() {
   const [repoUrl, setRepoUrl] = useState('');
@@ -133,15 +134,21 @@ function App() {
       {/* HEADER */}
       <div className="h-16 border-b border-slate-800 bg-slate-900 flex items-center justify-between px-6 z-50 shadow-md">
         <div className="flex items-center gap-2 text-blue-400">
-          <Github className="w-6 h-6" />
-          <h1 className="font-bold text-lg tracking-wider text-slate-100">REPO<span className="text-blue-500">VIZ</span></h1>
+          <img 
+            src={repovizLogo} 
+            alt="RepoViz Logo" 
+            className="h-12 w-auto object-contain drop-shadow-[0_0_15px_rgba(59,130,246,0.6)]" 
+          />
+          <h1 className="text-2xl font-bold tracking-tighter text-transparent bg-clip-text bg-gradient-to-r from-blue-400 to-purple-500">
+            REPOVIZ
+          </h1>
         </div>
 
         <div className="flex items-center bg-slate-800 border border-slate-700 rounded-lg px-3 py-1.5 w-96 transition-colors focus-within:border-blue-500">
           <Search className="w-4 h-4 text-slate-500 mr-2" />
           <input 
             className="bg-transparent outline-none text-sm w-full placeholder:text-slate-600 text-white"
-            placeholder="owner/repo (e.g. facebook/react)"
+            placeholder="GitHub repo URL (e.g. https://github.com/facebook/react)"
             value={repoUrl}
             onChange={e => setRepoUrl(e.target.value)}
             onKeyDown={e => e.key === 'Enter' && handleAnalyze()}
@@ -172,9 +179,9 @@ function App() {
           {data.nodes.length === 0 && !loading && (
             <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none opacity-30 select-none">
               <div className="w-64 h-64 border border-dashed border-slate-600 rounded-full flex items-center justify-center animate-pulse">
-                <Github className="w-24 h-24 text-slate-600" />
+                <Github className="w-24 h-24 text-white" />
               </div>
-              <p className="mt-8 text-slate-500 font-mono">WAITING FOR DATA STREAM...</p>
+              <p className="mt-8 text-white font-mono">WAITING FOR DATA STREAM...</p>
             </div>
           )}
 
