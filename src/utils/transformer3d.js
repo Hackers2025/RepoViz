@@ -30,7 +30,8 @@ export const generate3DTree = (fileList) => {
           name: part,
           group: isLast ? (file.type === 'tree' ? 'folder' : 'file') : 'folder',
           collapsed: true, // ALL folders start collapsed
-          childLinks: []
+          childLinks: [],
+          size: (isLast && file.size) ? file.size : 0
         };
 
         // Link to Parent
