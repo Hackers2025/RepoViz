@@ -1,56 +1,36 @@
-// src/github.js
-import { Octokit } from "@octokit/core";
+import { Octokit } from "@octokit/rest";
 
-console.log("My Token is:", import.meta.env.VITE_GITHUB_TOKEN);
-
-const octokit = new Octokit({
-  auth: import.meta.env.VITE_GITHUB_TOKEN
+// Initialize Octokit
+const octokit = new Octokit({ 
+  // Ensure your .env token is loaded. If not, this might be undefined (which is okay for public repos to a limit)
+  auth: import.meta.env.VITE_GITHUB_TOKEN 
 });
 
-export async function fetchRepoTree(owner, name) {
-  const query = `
-    query($owner: String!, $name: String!) {
-      repository(owner: $owner, name: $name) {
-        object(expression: "HEAD:") {
-          ... on Tree {
-            entries {
-              name
-              type
-              object {
-                ... on Blob {
-                  byteSize
-                }
-                ... on Tree {
-                  entries {
-                    name
-                    type
-                    object {
-                      ... on Blob { byteSize }
-                      ... on Tree {
-                        entries {
-                          name
-                          type
-                        }
-                      }
-                    }
-                  }
-                }
-              }
-            }
-          }
-        }
-      }
-    }
-  `;
-
+export const fetchRepoTree = async (owner, repo) => {
   try {
-    const response = await octokit.graphql(query, {
+    // 1. Get the repository details to find the "default branch" (usually main or master)
+    // We use .request() to avoid "undefined property" errors
+    const repoResponse = await octokit.request('GET /repos/{owner}/{repo}', {
       owner,
-      name,
+      repo,
     });
-    return response.repository.object.entries;
+    
+    const defaultBranch = repoResponse.data.default_branch;
+
+    // 2. Fetch the file tree recursively using that branch
+    const treeResponse = await octokit.request('GET /repos/{owner}/{repo}/git/trees/{tree_sha}', {
+      owner,
+      repo,
+      tree_sha: defaultBranch,
+      recursive: 'true', // returns all files, deep inside folders
+    });
+
+    // Success! Return the array of files
+    return treeResponse.data.tree;
+
   } catch (error) {
     console.error("GitHub API Error:", error);
-    return null;
+    // If it fails, return empty array so the app doesn't crash
+    return []; 
   }
-}
+};
