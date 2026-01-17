@@ -1,12 +1,10 @@
 import OpenAI from "openai";
-import { GoogleGenerativeAI } from "@google/generative-ai";
 import { safeParseJSON } from "./helpers"; // <--- REUSING YOUR LOGIC
 
-// const openai = new OpenAI({
-//   apiKey: import.meta.env.VITE_OPENAI_API_KEY,
-//   dangerouslyAllowBrowser: true 
-// });
-const genAI = new GoogleGenerativeAI(import.meta.env.VITE_GEMINI_API_KEY);
+const openai = new OpenAI({
+  apiKey: import.meta.env.VITE_OPENAI_API_KEY,
+  dangerouslyAllowBrowser: true 
+});
 
 export const runNavigator = async (question, fileStructure) => {
   try {
@@ -25,21 +23,14 @@ export const runNavigator = async (question, fileStructure) => {
       Return { "files": [] } if no specific files are needed.
     `;
 
-    // const completion = await openai.chat.completions.create({
-    //   messages: [{ role: "user", content: prompt }],
-    //   model: "gpt-4o-mini",
-    //   response_format: { type: "json_object" }
-    // });
-
-    // const result = safeParseJSON(completion.choices[0].message.content);
-
-    const model = genAI.getGenerativeModel({ 
-        model: "gemini-2.5-flash",
-        generationConfig: { responseMimeType: "application/json" }
+    const completion = await openai.chat.completions.create({
+      messages: [{ role: "user", content: prompt }],
+      model: "gpt-4o-mini",
+      response_format: { type: "json_object" }
     });
 
-    const res = await model.generateContent(prompt);
-    const result = safeParseJSON(res.response.text());
+    const result = safeParseJSON(completion.choices[0].message.content);
+
     return result.files || [];
 
   } catch (error) {

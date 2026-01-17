@@ -4,6 +4,7 @@ import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
 import { vscDarkPlus } from 'react-syntax-highlighter/dist/esm/styles/prism';
 
 export default function TypewriterMarkdown({ content = "", speed = 5 }) {
+  const safeContent = typeof content === 'string' ? content : String(content || "");
   const [displayedContent, setDisplayedContent] = useState("");
   const indexRef = useRef(0);
 
@@ -11,24 +12,24 @@ export default function TypewriterMarkdown({ content = "", speed = 5 }) {
   useEffect(() => {
     setDisplayedContent("");
     indexRef.current = 0;
-  }, [content]);
+  }, [safeContent]);
 
   useEffect(() => {
     // If we have displayed everything, stop.
-    if (indexRef.current >= content.length) return;
+    if (indexRef.current >= safeContent.length) return;
 
     const timer = setInterval(() => {
       indexRef.current += 1;
       // Slice is safer than appending to prevent character skipping
-      setDisplayedContent(content.slice(0, indexRef.current));
+      setDisplayedContent(safeContent.slice(0, indexRef.current));
       
-      if (indexRef.current >= content.length) {
+      if (indexRef.current >= safeContent.length) {
         clearInterval(timer);
       }
     }, speed);
 
     return () => clearInterval(timer);
-  }, [content, speed, displayedContent]); // Re-run effect to keep typing
+  }, [safeContent, speed, displayedContent]); // Re-run effect to keep typing
 
   return (
     <div className="markdown-container text-sm leading-relaxed text-slate-300">

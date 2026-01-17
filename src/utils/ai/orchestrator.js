@@ -1,16 +1,14 @@
 import OpenAI from "openai";
-import { GoogleGenerativeAI } from "@google/generative-ai";
 import { fetchFileContent } from '../../github'; 
 import { RepoMemory } from './memory';
 import { runNavigator } from './navigator';
 import { runArchitect } from './architect';
 import { safeParseJSON } from './helpers';
 
-// const openai = new OpenAI({
-//   apiKey: import.meta.env.VITE_OPENAI_API_KEY,
-//   dangerouslyAllowBrowser: true 
-// });
-const genAI = new GoogleGenerativeAI(import.meta.env.VITE_GEMINI_API_KEY);
+const openai = new OpenAI({
+  apiKey: import.meta.env.VITE_OPENAI_API_KEY,
+  dangerouslyAllowBrowser: true 
+});
 
 // ==========================================
 // PART 1: PREVIOUS AI LOGIC (NODE ANALYSIS)
@@ -34,20 +32,13 @@ export const generateFolderSummary = async (folderName, folderFiles, allProjectF
       }
     `;
 
-    // const completion = await openai.chat.completions.create({
-    //   messages: [{ role: "user", content: prompt }],
-    //   model: "gpt-4o-mini",
-    //   response_format: { type: "json_object" } 
-    // });
-    // return safeParseJSON(completion.choices[0].message.content);
-
-    const model = genAI.getGenerativeModel({ 
-      model: "gemini-2.5-flash",
-      generationConfig: { responseMimeType: "application/json" }
+    const completion = await openai.chat.completions.create({
+      messages: [{ role: "user", content: prompt }],
+      model: "gpt-4o-mini",
+      response_format: { type: "json_object" } 
     });
+    return safeParseJSON(completion.choices[0].message.content);
 
-    const result = await model.generateContent(prompt);
-    return safeParseJSON(result.response.text());
   } catch (error) {
     return { summary: "Could not analyze folder.", detail: "" };
   }
@@ -70,21 +61,14 @@ export const generateFileExplanation = async (fileName, fileCode, allFilePaths) 
       }
     `;
 
-    // const completion = await openai.chat.completions.create({
-    //   messages: [{ role: "user", content: prompt }],
-    //   model: "gpt-4o-mini",
-    //   response_format: { type: "json_object" }
-    // });
-
-    // return safeParseJSON(completion.choices[0].message.content);
-
-    const model = genAI.getGenerativeModel({ 
-      model: "gemini-2.5-flash",
-      generationConfig: { responseMimeType: "application/json" }
+    const completion = await openai.chat.completions.create({
+      messages: [{ role: "user", content: prompt }],
+      model: "gpt-4o-mini",
+      response_format: { type: "json_object" }
     });
 
-    const result = await model.generateContent(prompt);
-    return safeParseJSON(result.response.text());
+    return safeParseJSON(completion.choices[0].message.content);
+
   } catch (error) {
     return { summary: "Could not analyze file.", detail: "" };
   }

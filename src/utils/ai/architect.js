@@ -1,11 +1,10 @@
 import OpenAI from "openai";
-import { GoogleGenerativeAI } from "@google/generative-ai";
+import { safeParseJSON } from "./helpers";
 
-// const openai = new OpenAI({
-//   apiKey: import.meta.env.VITE_OPENAI_API_KEY,
-//   dangerouslyAllowBrowser: true 
-// });
-const genAI = new GoogleGenerativeAI(import.meta.env.VITE_GEMINI_API_KEY);
+const openai = new OpenAI({
+  apiKey: import.meta.env.VITE_OPENAI_API_KEY,
+  dangerouslyAllowBrowser: true 
+});
 
 export const runArchitect = async (question, codeContext, previousChat) => {
   try {
@@ -24,22 +23,15 @@ export const runArchitect = async (question, codeContext, previousChat) => {
       Answer the question technically. If providing code, explain WHERE it goes. Use the CHAT HISTORY to understand context (like what we just discussed).
     `;
 
-    // const completion = await openai.chat.completions.create({
-    //   messages: [{ role: "user", content: prompt }],
-    //   model: "gpt-4o-mini",
-    // });
-
-    // return completion.choices[0].message.content;
-
-    const model = genAI.getGenerativeModel({ 
-        model: "gemini-2.5-flash",
-        generationConfig: { responseMimeType: "application/json" }
+    const completion = await openai.chat.completions.create({
+      messages: [{ role: "user", content: prompt }],
+      model: "gpt-4o-mini",
     });
 
-    const result = await model.generateContent(prompt);
-    return safeParseJSON(result.response.text());
+    return completion.choices[0].message.content;
 
   } catch (error) {
+    console.log(error);
     return "I am unable to generate an answer right now.";
   }
 };

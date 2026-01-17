@@ -1,91 +1,78 @@
-import * as THREE from 'three'; // <--- Don't forget this!
+import * as THREE from 'three'; 
 import React, { useRef, useCallback, useMemo, useState, useEffect } from 'react';
 import ForceGraph3D from 'react-force-graph-3d';
 import SpriteText from 'three-spritetext';
 
-// ---------------------------------------------------------
-// 2. HELPER FUNCTION (Place createDuck here)
-// ---------------------------------------------------------
-const createDuck = (node) => {
-  const group = new THREE.Group();
-
-  // Scale logic: Big files = Big Ducks
-  const baseSize = node.size && node.size > 0 ? Math.max(5, Math.log2(node.size) * 1.5) : 5;
-  const scale = baseSize * 0.2; 
-
-  // BODY
-  const bodyGeo = new THREE.SphereGeometry(4 * scale, 16, 16);
-  const bodyMat = new THREE.MeshLambertMaterial({ color: '#000000' }); 
-  const body = new THREE.Mesh(bodyGeo, bodyMat);
-  group.add(body);
-
-  // HEAD
-  const headGeo = new THREE.SphereGeometry(2.5 * scale, 16, 16);
-  const head = new THREE.Mesh(headGeo, bodyMat);
-  head.position.set(2.5 * scale, 3 * scale, 0); 
-  group.add(head);
-
-  // BEAK
-  const beakGeo = new THREE.ConeGeometry(1 * scale, 2 * scale, 8);
-  const beakMat = new THREE.MeshLambertMaterial({ color: '#f97316' }); 
-  const beak = new THREE.Mesh(beakGeo, beakMat);
-  beak.rotation.z = -Math.PI / 2; 
-  beak.position.set(5 * scale, 3 * scale, 0);
-  group.add(beak);
-
-  // EYES
-  const eyeGeo = new THREE.SphereGeometry(0.4 * scale);
-  const eyeMat = new THREE.MeshBasicMaterial({ color: '#000000' });
-  
-  const leftEye = new THREE.Mesh(eyeGeo, eyeMat);
-  leftEye.position.set(3.5 * scale, 4 * scale, 1 * scale);
-  group.add(leftEye);
-
-  const rightEye = new THREE.Mesh(eyeGeo, eyeMat);
-  rightEye.position.set(3.5 * scale, 4 * scale, -1 * scale);
-  group.add(rightEye);
-
-  return group;
-};
-
 export default function RepoGraph3D({ graphData, onNodeSelect }) {
   const graphRef = useRef();
-  const containerRef = useRef(); // 1. Reference to the container div
-  const [dimensions, setDimensions] = useState({ width: 800, height: 600 }); // 2. State for size
+  const containerRef = useRef(); 
+  const [dimensions, setDimensions] = useState({ width: 800, height: 600 }); 
   const [pruneTrigger, setPruneTrigger] = useState(0);
   const [hoverNode, setHoverNode] = useState(null);
 
+  // --- 1. STARFIELD BACKGROUND (Increased to 5000 stars) ---
+  useEffect(() => {
+    const fg = graphRef.current;
+    if (!fg) return;
+
+    // Clear old stars if any
+    fg.scene().children = fg.scene().children.filter(c => c.type !== 'Points');
+
+    const starGeometry = new THREE.BufferGeometry();
+    const starCount = 15000; // INCREASED DENSITY
+    const posArray = new Float32Array(starCount * 3); 
+
+    for(let i = 0; i < starCount * 3; i++) {
+      // Spread stars over a larger area (3000 units) for depth
+      posArray[i] = (Math.random() - 0.5) * 3000; 
+    }
+    
+    starGeometry.setAttribute('position', new THREE.BufferAttribute(posArray, 3));
+
+    const starMaterial = new THREE.PointsMaterial({
+      size: 1.5, // Slightly smaller stars for realism
+      color: 0xffffff,
+      transparent: true,
+      opacity: 0.8,
+      sizeAttenuation: true // Makes distant stars smaller
+    });
+    
+    const stars = new THREE.Points(starGeometry, starMaterial);
+    fg.scene().add(stars);
+
+    // Add lighting
+    const ambientLight = new THREE.AmbientLight(0xffffff, 0.6);
+    fg.scene().add(ambientLight);
+    const dirLight = new THREE.DirectionalLight(0xffffff, 1);
+    dirLight.position.set(100, 100, 100);
+    fg.scene().add(dirLight);
+
+  }, []); 
+
+  // --- 2. PATH FINDING HELPER ---
   const getPathToRoot = useCallback((node) => {
     const path = new Set();
     let currentId = node.id;
-
-    // Safety: Limit loop to 100 levels deep to prevent crashes
     let attempts = 0;
     while (currentId && attempts < 100) {
-      path.add(currentId); // Add current node to the "lit up" list
-      
-      if (currentId === 'root') break; // Stop if we hit the top
-
-      // Find the link where "Target" == Current Node (so "Source" is the Parent)
+      path.add(currentId); 
+      if (currentId === 'root') break; 
       const parentLink = graphData.links.find(l => 
           (typeof l.target === 'object' ? l.target.id : l.target) === currentId
       );
-      
-      // Move up to the parent
       if (parentLink) {
           currentId = typeof parentLink.source === 'object' ? parentLink.source.id : parentLink.source;
       } else {
-          break; // No parent found (detached node)
+          break; 
       }
       attempts++;
     }
     return path;
     }, [graphData]);
 
-  // 3. Measure the container size on load and resize
+  // --- 3. RESIZE HANDLER ---
   useEffect(() => {
     if (!containerRef.current) return;
-    
     const resizeObserver = new ResizeObserver((entries) => {
       for (const entry of entries) {
         setDimensions({
@@ -94,13 +81,12 @@ export default function RepoGraph3D({ graphData, onNodeSelect }) {
         });
       }
     });
-
     resizeObserver.observe(containerRef.current);
     return () => resizeObserver.disconnect();
   }, []);
 
+  // --- 4. DATA FILTERING (EXPAND ON CLICK) ---
   const visibleData = useMemo(() => {
-    // ... (Keep your existing visibleData logic exactly the same) ...
     if (!graphData.nodes.length) return { nodes: [], links: [] };
 
     const visibleNodes = new Set();
@@ -125,11 +111,10 @@ export default function RepoGraph3D({ graphData, onNodeSelect }) {
       nodes: graphData.nodes.filter(n => visibleNodes.has(n.id)),
       links: visibleLinks
     };
-    // ...
   }, [graphData, pruneTrigger]);
 
+  // --- 5. CLICK HANDLER ---
   const handleNodeClick = useCallback(node => {
-     // ... (Keep your existing handleNodeClick logic) ...
      if (onNodeSelect) onNodeSelect(node);
      if (node.childLinks?.length) {
         node.collapsed = !node.collapsed;
@@ -145,129 +130,89 @@ export default function RepoGraph3D({ graphData, onNodeSelect }) {
   }, [graphRef, onNodeSelect]);
 
   return (
-    // 4. Wrap everything in a div with width/height 100% and the ref
     <div ref={containerRef} className="w-full h-full">
       <ForceGraph3D
         ref={graphRef}
-        // 5. Pass the measured dimensions here
         width={dimensions.width}
         height={dimensions.height}
         
         graphData={visibleData}
-        backgroundColor="#0f172a"
+        backgroundColor="#000000" 
         nodeLabel="name"
-        // nodeVal={node => {
-        //   // 1. Root and Folders: Use fixed sizes (Like your original code)
-        //   if (node.id === 'root') return 30;
-        //   if (node.group === 'folder') return 20;
-
-        //   // 2. Files: Check if we actually have a valid size
-        //   if (!node.size || node.size <= 0) {
-        //       return 5; // FALLBACK: If no size data, look like a normal file
-        //   }
-
-        //   // 3. If size exists, calculate the Heatmap size
-        //   // Math.max(5, ...) ensures even tiny files are at least size 5
-        //   console.log(node.size);
-        //   return Math.max(5, Math.log2(node.size) * 1.5);
-        // }}
         nodeVal={0} 
-    nodeOpacity={0}
+        nodeOpacity={0}
 
-    // CUSTOM RENDERER
-    nodeThreeObject={node => {
-        // CASE 1: FOLDERS (Keep as Text Labels + Blue Sphere)
-        if (node.group === 'folder' || node.group === 'root') {
+        // --- CUSTOM RENDERER (Spheres Only) ---
+        nodeThreeObject={node => {
             const group = new THREE.Group();
             
-            // The Blue/Red Sphere
-            const color = node.id === 'root' ? '#ef4444' : '#3b82f6';
-            const geometry = new THREE.SphereGeometry(node.group === 'root' ? 10 : 6);
-            const material = new THREE.MeshLambertMaterial({ color, transparent: true, opacity: 0.8 });
+            // Determine Color
+            let color = '#10b981'; // Default Green (File)
+            if (node.id === 'root') color = '#ef4444'; // Red
+            else if (node.group === 'folder') color = '#3b82f6'; // Blue
+            else if (String(node.name).endsWith('.js') || String(node.name).endsWith('.tsx')) color = '#eab308'; // Yellow
+
+            // Determine Size
+            const size = node.group === 'root' ? 10 : (node.group === 'folder' ? 6 : 4);
+
+            // Create Sphere
+            const geometry = new THREE.SphereGeometry(size, 16, 16);
+            const material = new THREE.MeshLambertMaterial({ color, transparent: true, opacity: 0.9 });
             group.add(new THREE.Mesh(geometry, material));
 
-            // The Text Label (Only if expanded)
-            if (!node.collapsed) {
+            // Add Text Label (Only for folders/root or if expanded)
+            if ((node.group === 'folder' || node.group === 'root') && !node.collapsed) {
                 const sprite = new SpriteText(node.name);
                 sprite.color = 'white';
                 sprite.textHeight = 4;
-                sprite.position.y = 12;
+                sprite.position.y = size + 4; // Float above node
                 group.add(sprite);
             }
             return group;
-        }
-
-        // CASE 2: FILES -> BECOME DUCKS 🦆
-        return createDuck(node);
-    }}
-        // 3. Capture Hover Events
+        }}
+        
         onNodeHover={setHoverNode}
-
-        // 1. Highlight the full Path
+        
+        // --- PATH HIGHLIGHTING ---
         nodeColor={node => {
-          const standardColor = 
-          node.id === 'root' ? '#ef4444' : 
-          node.group === 'folder' ? '#3b82f6' : 
-          (String(node.name).endsWith('.js') || String(node.name).endsWith('.tsx')) ? '#eab308' : 
-          '#10b981';
+          let color = '#eab308';
+          if (node.id === 'root') color = '#ef4444';
+          else if (node.group === 'folder') color = '#3b82f6';
 
-          // LOGIC: If hovering...
           if (hoverNode) {
             const path = getPathToRoot(hoverNode);
-            // If this node is NOT in the path, dim it
-            if (!path.has(node.id)) {
-                return '#1e293b'; // Ghost Mode
-            }
+            if (!path.has(node.id)) return '#1e293b'; // Dim if not in path
           }
-          return standardColor;
+          return color;
         }}
 
-          // 2. Highlight only links ON the path
-        
-          linkColor={link => {
+        linkColor={link => {
             if (hoverNode) {
                const sourceId = typeof link.source === 'object' ? link.source.id : link.source;
                const targetId = typeof link.target === 'object' ? link.target.id : link.target;
-                  
                const path = getPathToRoot(hoverNode);
-               // Show link ONLY if both ends are part of the path
-               if (path.has(sourceId) && path.has(targetId)) {
-                return '#60a5fa'; // Bright Blue line for the active path
-                } else {
-                  return 'rgba(0,0,0,0)'; // Invisible
-                }
-              }
-              return '#334155'; // Default color when not hovering
-          }}
+               
+               if (path.has(sourceId) && path.has(targetId)) return '#60a5fa'; 
+               return 'rgba(0,0,0,0)'; 
+            }
+            return '#334155'; 
+        }}
           
-          // Make the active path slightly thicker
-          linkWidth={link => {
-              if (hoverNode) {
-                  const sourceId = typeof link.source === 'object' ? link.source.id : link.source;
-                  const targetId = typeof link.target === 'object' ? link.target.id : link.target;
-                  const path = getPathToRoot(hoverNode);
-                  if (path.has(sourceId) && path.has(targetId)) return 3; // Thick line
-              }
-              return link.type === 'dependency' ? 0.5 : 1.5;
-          }}
+        linkWidth={link => {
+            if (hoverNode) {
+                const sourceId = typeof link.source === 'object' ? link.source.id : link.source;
+                const targetId = typeof link.target === 'object' ? link.target.id : link.target;
+                const path = getPathToRoot(hoverNode);
+                if (path.has(sourceId) && path.has(targetId)) return 3; 
+            }
+            return link.type === 'dependency' ? 0.5 : 1.5;
+        }}
         
-        // 6. Adjust Opacity (Optional: makes ghosts see-through)
-        // nodeOpacity={0} 
         linkOpacity={0.3}
- 
         linkDirectionalParticles={link => link.type === 'dependency' ? 4 : 0}
         linkDirectionalParticleSpeed={0.005}
         onNodeClick={handleNodeClick}
         nodeThreeObjectExtend={true}
-        // nodeThreeObject={node => {
-        //     if (node.group === 'folder' && !node.collapsed) {
-        //         const sprite = new SpriteText(node.name);
-        //         sprite.color = 'white';
-        //         sprite.textHeight = 4; 
-        //         sprite.position.y = 12; 
-        //         return sprite;
-        //     }
-        // }}
       />
     </div>
   );
