@@ -1,33 +1,55 @@
-import React, { useState, useMemo, useEffect } from 'react';
+import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { 
   LayoutDashboard, 
   FileCode, 
-  Settings, 
+  MessageSquare, // Chat Icon
   Box, 
   Folder, 
   File, 
-  AlertCircle,
   Sparkles,
   Loader2,
+  Send,
+  User,
+  Bot,
   ChevronDown,
-  ChevronUp
+  ChevronUp,
+  Compass, // Navigator Icon
+  Hammer,  // Architect Icon
+  Cpu      // System Icon
 } from 'lucide-react';
+// IMPORT THE AGENT ORCHESTRATOR
+import { askRepoQuestion } from '../utils/ai/orchestrator';
+import TypewriterMarkdown from './TypewriterMarkdown';
 
-export default function Sidebar({ repoData, selectedNode, aiData, isAiLoading }) {
+export default function Sidebar({ repoData, selectedNode, aiData, isAiLoading, repoOwner, repoName, rawTreeList }) {
   const [activeTab, setActiveTab] = useState('overview');
+
+  // --- INSPECTOR STATE ---
   const [isExpanded, setIsExpanded] = useState(false);
 
-  // Reset expansion when node changes
+  // --- CHAT STATE ---
+  const [input, setInput] = useState('');
+  const [chatHistory, setChatHistory] = useState([
+    { role: 'ai', content: 'Hi! I am your Repo Assistant. Ask me anything about this codebase.' }
+  ]);
+  const [isChatLoading, setIsChatLoading] = useState(false);
+  const [agentStatus, setAgentStatus] = useState(null); // { agent: 'Navigator', message: '...' }
+  const chatEndRef = useRef(null);
+
+  // Auto-switch to inspector when node selected
   useEffect(() => {
-     setIsExpanded(false);
+    if (selectedNode) {
+        setActiveTab('inspector');
+        setIsExpanded(false); // Reset read more
+    }
   }, [selectedNode]);
 
-  // Switch to Inspector tab automatically when a node is selected
+  // Auto-scroll chat
   useEffect(() => {
-    if (selectedNode) setActiveTab('inspector');
-  }, [selectedNode]);
+    chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  }, [chatHistory, activeTab]);
 
-  // --- 1. CALCULATE STATS ---
+  // --- STATS CALCULATION ---
   const stats = useMemo(() => {
     if (!repoData.nodes.length) return null;
     const nodes = repoData.nodes;
@@ -44,13 +66,39 @@ export default function Sidebar({ repoData, selectedNode, aiData, isAiLoading })
       .sort((a, b) => b[1] - a[1])
       .slice(0, 3);
 
-    return {
-      total: nodes.length,
-      folderCount: folders.length,
-      fileCount: files.length,
-      topLangs
-    };
+    return { total: nodes.length, folderCount: folders.length, fileCount: files.length, topLangs };
   }, [repoData]);
+
+  // --- CHAT HANDLER ---
+  const handleSend = async () => {
+    if (!input.trim() || isChatLoading) return;
+
+    const userMsg = input;
+    setInput('');
+    setChatHistory(prev => [...prev, { role: 'user', content: userMsg }]);
+    
+    setIsChatLoading(true);
+    setAgentStatus({ agent: 'System', message: 'Initializing agents...' });
+
+    try {
+      // Call the Orchestrator with the Callback
+      const answer = await askRepoQuestion(
+        userMsg, 
+        rawTreeList, 
+        repoOwner, 
+        repoName,
+        (agent, message) => setAgentStatus({ agent, message }), // Update UI Status
+        chatHistory
+      );
+      
+      setChatHistory(prev => [...prev, { role: 'ai', content: answer }]);
+    } catch (e) {
+      setChatHistory(prev => [...prev, { role: 'ai', content: "Sorry, I crashed." }]);
+    } finally {
+      setIsChatLoading(false);
+      setAgentStatus(null);
+    }
+  };
 
   if (!repoData.nodes.length) {
     return (
@@ -65,19 +113,19 @@ export default function Sidebar({ repoData, selectedNode, aiData, isAiLoading })
   return (
     <div className="w-full h-full flex flex-col bg-slate-900 border-l border-slate-800 shadow-2xl">
       
-      {/* TAB HEADER */}
+      {/* TABS */}
       <div className="flex border-b border-slate-800 bg-slate-900/50">
         <TabButton icon={<LayoutDashboard size={16}/>} label="Overview" active={activeTab === 'overview'} onClick={() => setActiveTab('overview')} />
         <TabButton icon={<FileCode size={16}/>} label="Inspector" active={activeTab === 'inspector'} onClick={() => setActiveTab('inspector')} />
-        <TabButton icon={<Settings size={16}/>} label="Settings" active={activeTab === 'settings'} onClick={() => setActiveTab('settings')} />
+        <TabButton icon={<MessageSquare size={16}/>} label="Ask AI" active={activeTab === 'chat'} onClick={() => setActiveTab('chat')} />
       </div>
 
-      {/* CONTENT AREA */}
-      <div className="flex-1 overflow-y-auto p-6 text-slate-300 scrollbar-thin scrollbar-thumb-slate-700">
+      {/* CONTENT */}
+      <div className="flex-1 overflow-hidden relative">
         
-        {/* === TAB 1: OVERVIEW === */}
+        {/* === OVERVIEW TAB === */}
         {activeTab === 'overview' && stats && (
-          <div className="space-y-6 animate-fadeIn">
+          <div className="p-6 overflow-y-auto h-full text-slate-300 space-y-6 animate-fadeIn">
             <div>
               <h2 className="text-xl font-bold text-white mb-1">Project Stats</h2>
               <p className="text-xs text-slate-500 uppercase tracking-wider">Real-time Analysis</p>
@@ -88,7 +136,6 @@ export default function Sidebar({ repoData, selectedNode, aiData, isAiLoading })
               <StatCard label="Files" value={stats.fileCount} color="text-emerald-400" />
               <StatCard label="Depth" value="~5 Levels" color="text-purple-400" />
             </div>
-            {/* Language Bar */}
             <div className="bg-slate-800/50 rounded-lg p-4 border border-slate-700">
                <h3 className="text-sm font-semibold text-white mb-3">Top Extensions</h3>
                <div className="space-y-3">
@@ -106,9 +153,9 @@ export default function Sidebar({ repoData, selectedNode, aiData, isAiLoading })
           </div>
         )}
 
-        {/* === TAB 2: INSPECTOR (AI INTEGRATION) === */}
+        {/* === INSPECTOR TAB === */}
         {activeTab === 'inspector' && (
-          <div className="space-y-6 animate-fadeIn">
+          <div className="p-6 overflow-y-auto h-full text-slate-300 space-y-6 animate-fadeIn">
             {!selectedNode ? (
               <div className="h-64 flex flex-col items-center justify-center text-slate-600 border-2 border-dashed border-slate-800 rounded-xl">
                 <Box className="w-12 h-12 mb-2 opacity-50"/>
@@ -116,66 +163,48 @@ export default function Sidebar({ repoData, selectedNode, aiData, isAiLoading })
               </div>
             ) : (
               <>
-                {/* Header */}
                 <div className="flex items-start gap-3">
                     <div className={`p-3 rounded-lg ${selectedNode.group === 'folder' ? 'bg-blue-500/20 text-blue-400' : 'bg-yellow-500/20 text-yellow-400'}`}>
                         {selectedNode.group === 'folder' ? <Folder size={24}/> : <File size={24}/>}
                     </div>
                     <div className="flex-1 overflow-hidden">
-                        <h2 className="text-lg font-bold text-white truncate" title={selectedNode.name}>
-                            {selectedNode.name}
-                        </h2>
+                        <h2 className="text-lg font-bold text-white truncate" title={selectedNode.name}>{selectedNode.name}</h2>
                         <p className="text-xs text-slate-500 font-mono break-all">{selectedNode.id}</p>
                     </div>
                 </div>
 
                 {/* AI INSIGHT BOX */}
                 <div className="bg-slate-800/80 rounded-lg overflow-hidden border border-slate-600 shadow-md transition-all duration-300">
-                    
-                    {/* Header */}
                     <div className="px-4 py-3 border-b border-slate-700 bg-slate-800/50 flex justify-between items-center">
                         <div className="flex items-center gap-2">
                             <Sparkles className="w-4 h-4 text-purple-400" />
                             <h3 className="text-xs font-bold uppercase tracking-wider text-purple-300">AI Analysis</h3>
                         </div>
                     </div>
-
-                    {/* Content */}
                     <div className="p-4">
                         {isAiLoading ? (
                             <div className="flex flex-col items-center justify-center gap-2 py-2">
                                 <Loader2 className="w-5 h-5 animate-spin text-blue-400" />
-                                <span className="text-xs text-slate-500"> analyzing...</span>
+                                <span className="text-xs text-slate-500">analyzing...</span>
                             </div>
                         ) : (
                             <div className="animate-in fade-in slide-in-from-bottom-2 duration-500">
-                                
-                                {/* The Concise Summary */}
                                 <p className="text-sm text-slate-200 leading-relaxed font-medium">
                                     {aiData.summary || "No analysis available."}
                                 </p>
-
-                                {/* The Hidden Detailed Section */}
-                                {isExpanded && (
+                                {isExpanded && aiData.detail && (
                                     <div className="mt-3 pt-3 border-t border-slate-700/50">
                                         <p className="text-xs text-slate-400 leading-relaxed whitespace-pre-wrap font-mono">
-                                            {/* Added 'whitespace-pre-wrap' and 'font-mono' */}
-                                            {aiData.detail || "No further details available."}
+                                            {aiData.detail}
                                         </p>
                                     </div>
                                 )}
-
-                                {/* The Toggle Button */}
-                                {aiData.detail && aiData.detail.length > 5 && (
+                                {aiData.detail && (
                                     <button 
                                       onClick={() => setIsExpanded(!isExpanded)}
                                       className="mt-3 flex items-center gap-1 text-[10px] uppercase font-bold text-blue-400 hover:text-blue-300 transition-colors"
                                     >
-                                        {isExpanded ? (
-                                            <>Read Less <ChevronUp size={12} /></>
-                                        ) : (
-                                            <>Read More <ChevronDown size={12} /></>
-                                        )}
+                                        {isExpanded ? <>Read Less <ChevronUp size={12} /></> : <>Read More <ChevronDown size={12} /></>}
                                     </button>
                                 )}
                             </div>
@@ -183,7 +212,7 @@ export default function Sidebar({ repoData, selectedNode, aiData, isAiLoading })
                     </div>
                 </div>
 
-                {/* CODE PREVIEW (Only if code exists) */}
+                {/* CODE PREVIEW */}
                 {aiData.code && !isAiLoading && (
                     <div className="flex flex-col gap-2">
                         <h3 className="text-xs font-bold uppercase tracking-wider text-slate-500">Source Code Preview</h3>
@@ -199,13 +228,68 @@ export default function Sidebar({ repoData, selectedNode, aiData, isAiLoading })
           </div>
         )}
 
-        {/* === TAB 3: SETTINGS === */}
-        {activeTab === 'settings' && (
-          <div className="space-y-6">
-             <div className="space-y-4">
-                <ToggleRow label="Show Particles" active={true} />
-                <ToggleRow label="3D Mode" active={true} />
-             </div>
+        {/* === ASK AI TAB === */}
+        {activeTab === 'chat' && (
+          <div className="flex flex-col h-full bg-slate-900">
+            <div className="flex-1 overflow-y-auto p-4 space-y-4 scrollbar-thin scrollbar-thumb-slate-700">
+              {chatHistory.map((msg, idx) => (
+                <div key={idx} className={`flex gap-3 ${msg.role === 'user' ? 'flex-row-reverse' : 'flex-row'}`}>
+                  <div className={`w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 ${msg.role === 'user' ? 'bg-blue-600' : 'bg-purple-600'}`}>
+                    {msg.role === 'user' ? <User size={14}/> : <Bot size={14}/>}
+                  </div>
+                  <div className={`max-w-[85%] rounded-2xl p-3 text-sm leading-relaxed overflow-hidden ${msg.role === 'user' ? 'bg-blue-600/20 text-blue-100 rounded-tr-none' : 'bg-slate-800 text-slate-300 rounded-tl-none'}`}>
+                    {msg.role === 'ai' && idx === chatHistory.length - 1 && !agentStatus ? (
+                         <TypewriterMarkdown content={msg.content} speed={3} />
+                    ) : (
+                         // Render static markdown for old messages or user messages
+                         <TypewriterMarkdown content={msg.content} speed={0} />
+                    )}
+                  </div>
+                </div>
+              ))}
+              
+              {/* AGENT VISUALIZER */}
+              {isChatLoading && agentStatus && (
+                <div className="flex flex-col gap-2 animate-in fade-in slide-in-from-bottom-2 ml-1">
+                    <div className="flex items-center gap-2 text-[10px] font-bold uppercase tracking-wider text-slate-500 ml-10">
+                        {agentStatus.agent === 'Navigator' && <Compass size={12} className="text-blue-400" />}
+                        {agentStatus.agent === 'Architect' && <Hammer size={12} className="text-purple-400" />}
+                        {agentStatus.agent === 'System' && <Cpu size={12} className="text-emerald-400" />}
+                        <span>{agentStatus.agent} Agent</span>
+                    </div>
+                    <div className="flex gap-3">
+                        <div className={`w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 animate-pulse ${
+                            agentStatus.agent==='Navigator'?'bg-blue-600':agentStatus.agent==='Architect'?'bg-purple-600':'bg-emerald-600'
+                        }`}><Bot size={14}/></div>
+                        <div className="bg-slate-800 rounded-2xl p-3 rounded-tl-none border border-slate-700/50 flex items-center gap-3 shadow-lg">
+                            <Loader2 className="w-4 h-4 animate-spin text-slate-400" />
+                            <span className="text-sm text-slate-300 font-mono">{agentStatus.message}</span>
+                        </div>
+                    </div>
+                </div>
+              )}
+              <div ref={chatEndRef} />
+            </div>
+
+            <div className="p-4 border-t border-slate-800 bg-slate-900">
+                <div className="relative">
+                    <input 
+                        className="w-full bg-slate-800 border border-slate-700 rounded-full py-3 pl-4 pr-12 text-sm text-white focus:outline-none focus:border-blue-500 transition-all placeholder:text-slate-500"
+                        placeholder="Ask about code, files, or features..."
+                        value={input}
+                        onChange={(e) => setInput(e.target.value)}
+                        onKeyDown={(e) => e.key === 'Enter' && handleSend()}
+                        disabled={isChatLoading}
+                    />
+                    <button 
+                        onClick={handleSend}
+                        disabled={!input.trim() || isChatLoading}
+                        className="absolute right-2 top-2 p-1.5 bg-blue-600 text-white rounded-full hover:bg-blue-500 disabled:opacity-50 transition-colors"
+                    >
+                        <Send size={16} />
+                    </button>
+                </div>
+            </div>
           </div>
         )}
 
@@ -214,30 +298,20 @@ export default function Sidebar({ repoData, selectedNode, aiData, isAiLoading })
   );
 }
 
-// Helpers... (TabButton, StatCard, ToggleRow same as before)
+// Helpers
 function TabButton({ icon, label, active, onClick }) {
-  return (
-    <button onClick={onClick} className={`flex-1 py-3 flex items-center justify-center gap-2 text-xs font-medium transition-all relative ${active ? 'text-blue-400 bg-slate-800/50' : 'text-slate-500 hover:text-slate-300'}`}>
-      {icon} <span>{label}</span>
-      {active && <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-blue-500 shadow-[0_0_10px_rgba(59,130,246,0.5)]" />}
-    </button>
-  );
+    return (
+        <button onClick={onClick} className={`flex-1 py-3 flex items-center justify-center gap-2 text-xs font-medium transition-all relative ${active ? 'text-blue-400 bg-slate-800/50' : 'text-slate-500 hover:text-slate-300'}`}>
+          {icon} <span>{label}</span>
+          {active && <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-blue-500 shadow-[0_0_10px_rgba(59,130,246,0.5)]" />}
+        </button>
+    );
 }
 function StatCard({ label, value, color }) {
-  return (
-    <div className="bg-slate-800/40 p-3 rounded border border-slate-700/50 flex flex-col items-center justify-center text-center">
-      <span className={`text-2xl font-bold font-mono ${color}`}>{value}</span>
-      <span className="text-[10px] text-slate-500 uppercase tracking-wider mt-1">{label}</span>
-    </div>
-  );
-}
-function ToggleRow({ label, active }) {
     return (
-        <div className="flex items-center justify-between p-3 bg-slate-800 rounded border border-slate-700 opacity-75">
-            <span className="text-sm text-slate-300">{label}</span>
-            <div className={`w-8 h-4 rounded-full relative ${active ? 'bg-blue-600' : 'bg-slate-600'}`}>
-                <div className={`absolute top-0.5 w-3 h-3 bg-white rounded-full transition-all ${active ? 'left-4.5' : 'left-0.5'}`} />
-            </div>
-        </div>
-    )
+      <div className="bg-slate-800/40 p-3 rounded border border-slate-700/50 flex flex-col items-center justify-center text-center">
+        <span className={`text-2xl font-bold font-mono ${color}`}>{value}</span>
+        <span className="text-[10px] text-slate-500 uppercase tracking-wider mt-1">{label}</span>
+      </div>
+    );
 }

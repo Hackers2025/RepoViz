@@ -1,6 +1,10 @@
 import React, { useState } from 'react';
-import { fetchRepoTree, fetchFileContent } from './github'; 
-import { generateFolderSummary, generateFileExplanation } from './utils/ai'; // <--- IMPORT AI
+import { fetchRepoTree, fetchFileContent } from './github';
+import { 
+  generateFolderSummary, 
+  generateFileExplanation, 
+  resetBrain 
+} from './utils/ai/orchestrator'; 
 import { generate3DTree } from './utils/transformer3d'; 
 import RepoGraph3D from './components/RepoGraph3D'; 
 import Sidebar from './components/Sidebar';
@@ -13,10 +17,18 @@ function App() {
   const [loading, setLoading] = useState(false);
   const [selectedNode, setSelectedNode] = useState(null);
 
-  // --- NEW STATE FOR AI & CONTEXT ---
+  // --- STATE FOR AI & CONTEXT ---
   const [rawTreeList, setRawTreeList] = useState([]); // Context for AI
-  const [sidebarData, setSidebarData] = useState({ description: '', code: '' }); // Content for Sidebar
-  const [aiLoading, setAiLoading] = useState(false); // Spinner for Sidebar
+  const [sidebarData, setSidebarData] = useState({ summary: '', detail: '', code: '' }); // Content for Sidebar
+  const [aiLoading, setAiLoading] = useState(false); // Spinner for Inspector
+
+  // Helper to extract owner/repo for the Chat Agent
+  const getRepoDetails = () => {
+    if (!repoUrl) return { owner: '', repo: '' };
+    const parts = repoUrl.replace('https://github.com/', '').split('/');
+    return { owner: parts[0], repo: parts[1] };
+  };
+  const { owner, repo } = getRepoDetails();
 
   const handleAnalyze = async () => {
     setLoading(true);
@@ -25,15 +37,18 @@ function App() {
       const parts = cleanUrl.split('/');
       if (parts.length < 2) throw new Error("Invalid URL. Format: owner/repo");
 
+      // 1. RESET AI MEMORY (New Repo = New Brain)
+      resetBrain();
+
       const rawTree = await fetchRepoTree(parts[0], parts[1]);
       
-      // 1. SAVE RAW LIST FOR AI CONTEXT
+      // 2. SAVE RAW LIST FOR AI CONTEXT
       setRawTreeList(rawTree.map(item => item.path));
 
       const graphData = generate3DTree(rawTree); 
       setData(graphData); 
       setSelectedNode(null); 
-      setSidebarData({ description: '', code: '' }); // Reset sidebar
+      setSidebarData({ summary: '', detail: '', code: '' }); // Reset sidebar
       
     } catch (e) {
       alert("Error: " + e.message);
@@ -42,7 +57,7 @@ function App() {
     }
   };
 
-  // --- NEW: HANDLE NODE CLICKS (AI TRIGGER) ---
+  // --- HANDLE NODE CLICKS (INSPECTOR TRIGGER) ---
   const handleNodeSelect = async (node) => {
     setSelectedNode(node);
     if (!node) return;
@@ -53,10 +68,7 @@ function App() {
     }));
 
     setAiLoading(true);
-    setSidebarData({ summary: '', detail: '', code: '' });
-
-    // Initialize with empty object
-    setSidebarData({ summary: '', detail: '', code: '' }); 
+    setSidebarData({ summary: '', detail: '', code: '' }); // Clear previous data
 
     try {
       // CASE 1: FOLDER
@@ -75,9 +87,9 @@ function App() {
       } 
       // CASE 2: FILE
       else {
-        const cleanUrl = repoUrl.replace('https://github.com/', '');
-        const parts = cleanUrl.split('/');
+        const parts = repoUrl.replace('https://github.com/', '').split('/');
         
+        // A. Fetch Real Code
         const code = await fetchFileContent(parts[0], parts[1], node.id);
         
         // --- NEW: DEPENDENCY VISUALIZATION ---
@@ -153,7 +165,7 @@ function App() {
           <div className="w-full h-full">
             <RepoGraph3D 
               graphData={data} 
-              onNodeSelect={handleNodeSelect} // <--- PASS THE NEW HANDLER
+              onNodeSelect={handleNodeSelect} 
             />
           </div>
           
@@ -182,8 +194,13 @@ function App() {
            <Sidebar 
               repoData={data} 
               selectedNode={selectedNode} 
-              aiData={sidebarData}   // <--- PASS DATA
-              isAiLoading={aiLoading} // <--- PASS LOADING STATE
+              aiData={sidebarData}   
+              isAiLoading={aiLoading}
+              
+              // --- PROPS FOR CHAT AGENT ---
+              rawTreeList={rawTreeList}
+              repoOwner={owner}
+              repoName={repo}
            />
         </div>
 
